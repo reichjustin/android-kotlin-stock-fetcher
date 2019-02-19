@@ -5,53 +5,52 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.TextView
 import android.view.View
+import android.widget.ProgressBar
+import com.example.stockticker.handlers.FetchQuoteHandler
 import kotlinx.coroutines.*
-import okhttp3.*
-import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
-    val httpClient = OkHttpClient()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // get all of the UI items needed for the handlers
         val fetchQuoteButton: Button = findViewById(R.id.get_quote)
         val priceView: TextView = findViewById(R.id.price)
         val stockText: TextView = findViewById(R.id.stock_ticker)
-        setupHandlers(priceView,stockText, fetchQuoteButton)
+        val spinner: ProgressBar = findViewById(R.id.progressBar)
+        setupHandlers(priceView, stockText, spinner, fetchQuoteButton)
     }
 
-    fun setupHandlers(priceView: TextView, stockText: TextView, fetchQuoteButton: Button) {
+    private fun setupHandlers(priceView: TextView, stockText: TextView, spinner: ProgressBar, fetchQuoteButton: Button) {
         fetchQuoteButton.setOnClickListener {
+            priceView.visibility = View.GONE
+
             val ticker = stockText.text
             if (ticker === null || ticker.length === 0) {
                 priceView.visibility = View.VISIBLE
                 priceView.text = "No ticker provided"
             } else {
+                spinner.visibility = View.VISIBLE
+
+                // launch a new supervisor job on the main (UI) thread
                 val job = SupervisorJob()
                 GlobalScope.launch(job + Dispatchers.Main) {
-                    val response = async(Dispatchers.IO) {
-                        val b: Deferred<Response> = async {
-                            val request = Request
-                                .Builder()
-                                .url("http://10.0.2.2:8080/price/$ticker")
-                                .build()
+                    // simulate some network delay so the spinner gets it's shine
+                    delay(300)
 
-                            httpClient.newCall(request).execute()
+                    // await on the fetch to get the price as string
+                    val price: String? = FetchQuoteHandler.fetchStockQuoteAsync(ticker.toString()).await()
 
-                        }
-
-                        b.await().body()?.string()
+                    if (price === null) {
+                        priceView.text = "Unable to retrieve price"
+                    } else {
+                        priceView.text = "$$price"
                     }
 
+                    spinner.visibility = View.GONE
                     priceView.visibility = View.VISIBLE
-
-                    val parsedJson: JSONObject? = JSONObject(response.await())
-
-                    if (parsedJson !== null) {
-                       priceView.text = parsedJson.getString("close")
-                    }
                 }
             }
         }
